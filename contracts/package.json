@@ -7,10 +7,20 @@
     "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia"
   },
   "devDependencies": {
-    "hardhat": "^2.16.0",
-    "@nomicfoundation/hardhat-toolbox": "^2.0.0"
+    "@nomicfoundation/hardhat-toolbox": "^2.0.2",
+    "ethers": "^5.8.0",
+    "hardhat": "^2.26.3"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^4.9.3"
-  }
+    "@openzeppelin/contracts": "^4.9.3",
+    "dotenv": "^17.2.1"
+  },
+  "main": "hardhat.config.js",
+  "directories": {
+    "test": "test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
 }

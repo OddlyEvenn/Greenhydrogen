@@ -1,69 +1,85 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
+/**
+ * GreenCreditToken (GHC): 1 token = 1 unit of certified green hydrogen (e.g., 1 kg or 1 ton; you decide off-chain).
+ * - ERC20
+ * - Burnable: "retire" = burn
+ * - AccessControl: CERTIFIER_ROLE can mint after verification
+ * - Pausable: emergency stop by DEFAULT_ADMIN_ROLE
+ */
 
-contract GreenHydrogenCredits is ERC1155, AccessControl, Pausable {
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+
+contract GreenCreditToken is ERC20, ERC20Burnable, AccessControl, Pausable {
     bytes32 public constant CERTIFIER_ROLE = keccak256("CERTIFIER_ROLE");
 
-    string public name = "Green Hydrogen Credits";
-    string public symbol = "GHC";
+    // Optional metadata so auditors/judges see intent
+    string public constant STANDARD = "Green Hydrogen Credit v1";
+    string public constant UNIT_HINT = "1 token = 1 unit green H2";
 
-    mapping(uint256 => string) private _tokenURIs;
-    mapping(uint256 => bool) public minted;
+    event CreditsIssued(address indexed to, uint256 amount, address indexed certifier);
+    event CreditsRetired(address indexed from, uint256 amount);
 
-    event BatchIssued(uint256 indexed batchId, address indexed producer, uint256 amount, string uri);
-    event BatchRetired(uint256 indexed batchId, address indexed account, uint256 amount);
-    event URISet(uint256 indexed batchId, string uri);
-
-    constructor(string memory baseURI, address admin) ERC1155(baseURI) {
+    constructor(
+        address admin,        // your deployer / regulator
+        address certifier     // entity allowed to mint
+    ) ERC20("Green Hydrogen Credit", "GHC") {
+        require(admin != address(0) && certifier != address(0), "zero addr");
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
-        _grantRole(ADMIN_ROLE, admin);
-        _pause(); // start paused
+        _grantRole(CERTIFIER_ROLE, certifier);
     }
 
-    function pause() external onlyRole(ADMIN_ROLE) { _pause(); }
-    function unpause() external onlyRole(ADMIN_ROLE) { _unpause(); }
+    // --- Admin controls ---
 
-    function issueBatch(address producer, uint256 batchId, uint256 amount, string calldata uri_) external whenNotPaused onlyRole(CERTIFIER_ROLE) {
-        require(!minted[batchId], "Batch already minted");
-        require(producer != address(0), "Invalid producer");
-        require(amount > 0, "Amount > 0");
-
-        minted[batchId] = true;
-        _mint(producer, batchId, amount, "");
-        _tokenURIs[batchId] = uri_;
-
-        emit BatchIssued(batchId, producer, amount, uri_);
-        emit URISet(batchId, uri_);
-        emit URI(uri_, batchId);
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
     }
 
-    function retire(uint256 batchId, uint256 amount) external whenNotPaused {
-        require(amount > 0, "Amount > 0");
-        _burn(msg.sender, batchId, amount);
-        emit BatchRetired(batchId, msg.sender, amount);
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
     }
 
-    function setURI(uint256 batchId, string calldata uri_) external whenNotPaused onlyRole(CERTIFIER_ROLE) {
-        require(minted[batchId], "Batch not minted");
-        _tokenURIs[batchId] = uri_;
-        emit URISet(batchId, uri_);
-        emit URI(uri_, batchId);
+    function setCertifier(address newCertifier) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(newCertifier != address(0), "zero addr");
+        _grantRole(CERTIFIER_ROLE, newCertifier);
     }
 
-    function uri(uint256 batchId) public view override returns (string memory) {
-        string memory custom = _tokenURIs[batchId];
-        if (bytes(custom).length > 0) return custom;
-        return super.uri(batchId);
+    function revokeCertifier(address certifier) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _revokeRole(CERTIFIER_ROLE, certifier);
     }
 
-    function _beforeTokenTransfer(address operator, address from, address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
-        internal override whenNotPaused
-    {
-        super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
+    // --- Minting (issuance) ---
+
+    /**
+     * Issue (mint) credits to a producer after verification by a certifier.
+     * amount uses ERC20 decimals (default 18). Decide your unit: 1e18 == 1 credit or 1 token?
+     * For hackathon: treat 1 * 10^18 as 1 credit for human-friendly display in UI.
+     */
+    function issueCredits(address to, uint256 amount) external whenNotPaused onlyRole(CERTIFIER_ROLE) {
+        require(to != address(0), "zero addr");
+        _mint(to, amount);
+        emit CreditsIssued(to, amount, _msgSender());
+    }
+
+    // --- Retire (burn) ---
+
+    /**
+     * Retire credits owned by msg.sender (burn).
+     * Once retired, they cannot be re-sold: aligns with "no double counting".
+     */
+    function retire(uint256 amount) external whenNotPaused {
+        _burn(_msgSender(), amount);
+        emit CreditsRetired(_msgSender(), amount);
+    }
+
+    // --- Hooks ---
+
+    function _update(address from, address to, uint256 value) internal override(ERC20) {
+        require(!paused(), "token paused");
+        super._update(from, to, value);
     }
 }

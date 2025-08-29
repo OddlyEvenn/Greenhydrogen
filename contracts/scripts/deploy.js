@@ -1,15 +1,41 @@
-const hre = require("hardhat");
+// const hre = require("hardhat");
+
+// async function main() {
+//   const [deployer, certifier] = await hre.ethers.getSigners();
+
+//   console.log("Deployer:", deployer.address);
+//   console.log("Certifier:", certifier.address);
+
+//   const Token = await hre.ethers.getContractFactory("GreenCreditToken");
+//   const token = await Token.deploy(deployer.address, certifier.address);
+//   await token.waitForDeployment();
+
+//   const addr = await token.getAddress();
+//   console.log("GreenCreditToken deployed to:", addr);
+
+//   // Optional: mint some demo credits to producer (here certifier mints to deployer)
+//   const issueTx = await token.connect(certifier).issueCredits(deployer.address, hre.ethers.parseUnits("10", 18));
+//   await issueTx.wait();
+//   console.log("Issued 10 credits to deployer");
+// }
+
+// main().catch((e) => {
+//   console.error(e);
+//   process.exit(1);
+// });
+
+
+const { ethers } = require("hardhat");
 
 async function main() {
-  const [deployer] = await hre.ethers.getSigners();
-  const baseURI = "https://example.com/ghc/{id}.json";
-  const admin = deployer.address;
+  const CreditSystem = await ethers.getContractFactory("CreditSystem");
+  const creditSystem = await CreditSystem.deploy();
+  await creditSystem.waitForDeployment();
 
-  const GHC = await hre.ethers.getContractFactory("GreenHydrogenCredits");
-  const ghc = await GHC.deploy(baseURI, admin);
-  await ghc.deployed();
-
-  console.log("GHC deployed at:", ghc.address);
+  console.log("CreditSystem deployed to:", await creditSystem.getAddress());
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
